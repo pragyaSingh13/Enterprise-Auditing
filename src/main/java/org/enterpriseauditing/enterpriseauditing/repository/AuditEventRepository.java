@@ -32,4 +32,6 @@ public interface AuditEventRepository
             Instant to,
             Pageable pageable
     );
+
+    AuditEvent findTopByOrderByTimestampDesc();
 }

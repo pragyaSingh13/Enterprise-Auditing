@@ -2,6 +2,7 @@ package org.enterpriseauditing.enterpriseauditing.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.enterpriseauditing.enterpriseauditing.dto.AuditChainVerificationResponse;
 import org.enterpriseauditing.enterpriseauditing.dto.AuditEventRequest;
 import org.enterpriseauditing.enterpriseauditing.model.AuditEvent;
 import org.enterpriseauditing.enterpriseauditing.service.AuditEventService;
@@ -115,5 +116,10 @@ public class AuditEventController {
                 to,
                 pageable
         );
+    }
+
+    @GetMapping("/verify")
+    public AuditChainVerificationResponse verifyAuditChain() {
+        return auditEventService.verifyAuditChain();
     }
 }
