@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.enterpriseauditing.enterpriseauditing.dto.AuditChainVerificationResponse;
 import org.enterpriseauditing.enterpriseauditing.dto.AuditEventRequest;
 import org.enterpriseauditing.enterpriseauditing.model.AuditEvent;
+import org.enterpriseauditing.enterpriseauditing.producer.AuditEventProducer;
 import org.enterpriseauditing.enterpriseauditing.repository.AuditEventRepository;
 import org.enterpriseauditing.enterpriseauditing.util.HashUtil;
 import org.springframework.data.domain.Page;
@@ -20,6 +21,7 @@ import java.util.Objects;
 public class AuditEventService {
 
     private final AuditEventRepository auditEventRepository;
+    private final AuditEventProducer auditEventProducer;
 
     // Create a new audit event
     public AuditEvent createAuditEvent(AuditEventRequest request) {
@@ -33,23 +35,12 @@ public class AuditEventService {
         auditEvent.setReason(request.reason());
         auditEvent.setTimestamp(Instant.now());
 
-        // Find the previous event in the chain
-        AuditEvent previousEvent =
-                auditEventRepository.findTopByOrderByTimestampDesc();
+        // Send the event to SQS instead of saving directly to MongoDB
+        auditEventProducer.sendAuditEvent(auditEvent);
 
-        if (previousEvent != null) {
-            auditEvent.setPreviousHash(previousEvent.getEventHash());
-        }
-
-        // Generate hash for the current event
-        String hashInput = buildHashInput(auditEvent);
-
-        String eventHash = HashUtil.sha256(hashInput);
-
-        auditEvent.setEventHash(eventHash);
-
-        return auditEventRepository.save(auditEvent);
+        return auditEvent;
     }
+
     // Get all audit events
     public List<AuditEvent> getAllAuditEvents() {
         return auditEventRepository.findAll();
@@ -100,10 +91,12 @@ public class AuditEventService {
         );
     }
 
+    // Pagination
     public Page<AuditEvent> getAuditEvents(Pageable pageable) {
         return auditEventRepository.findAll(pageable);
     }
 
+    // Time-range filtering
     public Page<AuditEvent> getEventsByTimeRange(
             Instant from,
             Instant to,
@@ -133,6 +126,7 @@ public class AuditEventService {
         return value == null ? "" : value;
     }
 
+    // Verify the complete audit hash chain
     public AuditChainVerificationResponse verifyAuditChain() {
 
         List<AuditEvent> events =
