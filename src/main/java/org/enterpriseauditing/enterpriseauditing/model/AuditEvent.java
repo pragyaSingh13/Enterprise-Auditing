@@ -49,4 +49,7 @@ public class AuditEvent {
 
     // Hash of the previous event
     private String previousHash;
+
+    // Digital signature of this audit event
+    private String digitalSignature;
 }

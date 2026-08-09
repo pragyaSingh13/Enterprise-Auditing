@@ -105,14 +105,39 @@ public class AuditEventController {
 
     @GetMapping("/search")
     public Page<AuditEvent> searchAuditEvents(
-            @RequestParam Instant from,
-            @RequestParam Instant to,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
 
-        Pageable pageable = PageRequest.of(page, size);
+            @RequestParam(required = false)
+            String actorId,
 
-        return auditEventService.getEventsByTimeRange(
+            @RequestParam(required = false)
+            String action,
+
+            @RequestParam(required = false)
+            String resourceType,
+
+            @RequestParam(required = false)
+            String resourceId,
+
+            @RequestParam(required = false)
+            Instant from,
+
+            @RequestParam(required = false)
+            Instant to,
+
+            @RequestParam(defaultValue = "0")
+            int page,
+
+            @RequestParam(defaultValue = "20")
+            int size) {
+
+        Pageable pageable =
+                PageRequest.of(page, size);
+
+        return auditEventService.searchAuditEvents(
+                actorId,
+                action,
+                resourceType,
+                resourceId,
                 from,
                 to,
                 pageable

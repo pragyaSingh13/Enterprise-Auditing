@@ -8,8 +8,12 @@ import org.enterpriseauditing.enterpriseauditing.producer.AuditEventProducer;
 import org.enterpriseauditing.enterpriseauditing.repository.AuditEventRepository;
 import org.enterpriseauditing.enterpriseauditing.util.HashUtil;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -23,6 +27,7 @@ public class AuditEventService {
 
     private final AuditEventRepository auditEventRepository;
     private final AuditEventProducer auditEventProducer;
+    private final MongoTemplate mongoTemplate;
 
     // Create a new audit event
     public AuditEvent createAuditEvent(AuditEventRequest request) {
@@ -112,21 +117,69 @@ public class AuditEventService {
         );
     }
 
-    private String buildHashInput(AuditEvent event) {
+    public Page<AuditEvent> searchAuditEvents(
+            String actorId,
+            String action,
+            String resourceType,
+            String resourceId,
+            Instant from,
+            Instant to,
+            Pageable pageable) {
 
-        return String.join("|",
-                nullToEmpty(event.getActorId()),
-                nullToEmpty(event.getAction()),
-                nullToEmpty(event.getResourceType()),
-                nullToEmpty(event.getResourceId()),
-                nullToEmpty(event.getReason()),
-                event.getTimestamp().toString(),
-                nullToEmpty(event.getPreviousHash())
+        Query query = new Query();
+
+        if (actorId != null && !actorId.isBlank()) {
+            query.addCriteria(
+                    Criteria.where("actorId").is(actorId)
+            );
+        }
+
+        if (action != null && !action.isBlank()) {
+            query.addCriteria(
+                    Criteria.where("action").is(action)
+            );
+        }
+
+        if (resourceType != null && !resourceType.isBlank()) {
+            query.addCriteria(
+                    Criteria.where("resourceType").is(resourceType)
+            );
+        }
+
+        if (resourceId != null && !resourceId.isBlank()) {
+            query.addCriteria(
+                    Criteria.where("resourceId").is(resourceId)
+            );
+        }
+
+        if (from != null && to != null) {
+            query.addCriteria(
+                    Criteria.where("timestamp")
+                            .gte(from)
+                            .lte(to)
+            );
+        } else if (from != null) {
+            query.addCriteria(
+                    Criteria.where("timestamp").gte(from)
+            );
+        } else if (to != null) {
+            query.addCriteria(
+                    Criteria.where("timestamp").lte(to)
+            );
+        }
+
+        long total = mongoTemplate.count(query, AuditEvent.class);
+
+        query.with(pageable);
+
+        List<AuditEvent> events =
+                mongoTemplate.find(query, AuditEvent.class);
+
+        return new PageImpl<>(
+                events,
+                pageable,
+                total
         );
-    }
-
-    private String nullToEmpty(String value) {
-        return value == null ? "" : value;
     }
     
 }

@@ -4,9 +4,14 @@ import io.awspring.cloud.sqs.annotation.SqsListener;
 import lombok.RequiredArgsConstructor;
 import org.enterpriseauditing.enterpriseauditing.model.AuditEvent;
 import org.enterpriseauditing.enterpriseauditing.repository.AuditEventRepository;
+import org.enterpriseauditing.enterpriseauditing.service.DigitalSignatureService;
 import org.enterpriseauditing.enterpriseauditing.service.RedisLockService;
+import org.enterpriseauditing.enterpriseauditing.util.AuditEventCanonicalizer;
 import org.enterpriseauditing.enterpriseauditing.util.HashUtil;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
@@ -17,6 +22,9 @@ public class AuditEventConsumer {
 
     private final AuditEventRepository auditEventRepository;
     private final RedisLockService redisLockService;
+    private final DigitalSignatureService digitalSignatureService;
+    private static final Logger log =
+            LoggerFactory.getLogger(AuditEventConsumer.class);
 
     @SqsListener("${aws.sqs.audit-queue-name}")
     public void consume(AuditEvent auditEvent) {
@@ -75,7 +83,7 @@ public class AuditEventConsumer {
                             + auditEvent.getId()
             );
 
-            Thread.sleep(5000);
+            Thread.sleep(0);
             // ==========================================
             // CRITICAL SECTION
             // ==========================================
@@ -91,14 +99,15 @@ public class AuditEventConsumer {
                         previousEvent.getEventHash()
                 );
             }
+            String hashInput = AuditEventCanonicalizer.buildHashInput(auditEvent);
 
-            // 6. Build hash input
-            String hashInput =
-                    buildHashInput(auditEvent);
+            String eventHash = HashUtil.sha256(hashInput);
 
-            // 7. Generate SHA-256 hash
-            String eventHash =
-                    HashUtil.sha256(hashInput);
+            //set digital signature
+            String digitalSignature =
+                    digitalSignatureService.sign(hashInput);
+
+            auditEvent.setDigitalSignature(digitalSignature);
 
             // 8. Set current event hash
             auditEvent.setEventHash(eventHash);
@@ -171,20 +180,4 @@ public class AuditEventConsumer {
         }
     }
 
-    private String buildHashInput(AuditEvent event) {
-
-        return String.join("|",
-                nullToEmpty(event.getActorId()),
-                nullToEmpty(event.getAction()),
-                nullToEmpty(event.getResourceType()),
-                nullToEmpty(event.getResourceId()),
-                nullToEmpty(event.getReason()),
-                event.getTimestamp().toString(),
-                nullToEmpty(event.getPreviousHash())
-        );
-    }
-
-    private String nullToEmpty(String value) {
-        return value == null ? "" : value;
-    }
 }
