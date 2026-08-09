@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +28,8 @@ public class AuditEventService {
     public AuditEvent createAuditEvent(AuditEventRequest request) {
 
         AuditEvent auditEvent = new AuditEvent();
+
+        auditEvent.setId(UUID.randomUUID().toString());
 
         auditEvent.setActorId(request.actorId());
         auditEvent.setAction(request.action());
