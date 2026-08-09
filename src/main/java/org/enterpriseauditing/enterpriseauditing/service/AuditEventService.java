@@ -128,54 +128,5 @@ public class AuditEventService {
     private String nullToEmpty(String value) {
         return value == null ? "" : value;
     }
-
-    // Verify the complete audit hash chain
-    public AuditChainVerificationResponse verifyAuditChain() {
-
-        List<AuditEvent> events =
-                auditEventRepository.findAll(
-                        Sort.by(Sort.Direction.ASC, "timestamp")
-                );
-
-        String previousHash = null;
-
-        for (AuditEvent event : events) {
-
-            // Check that the event points to the previous event
-            if (!Objects.equals(
-                    previousHash,
-                    event.getPreviousHash())) {
-
-                return new AuditChainVerificationResponse(
-                        false,
-                        "Audit chain tampering detected at event: "
-                                + event.getId()
-                );
-            }
-
-            // Recalculate the hash
-            String hashInput = buildHashInput(event);
-
-            String calculatedHash = HashUtil.sha256(hashInput);
-
-            // Compare calculated hash with stored hash
-            if (!Objects.equals(
-                    calculatedHash,
-                    event.getEventHash())) {
-
-                return new AuditChainVerificationResponse(
-                        false,
-                        "Audit event has been modified: "
-                                + event.getId()
-                );
-            }
-
-            previousHash = event.getEventHash();
-        }
-
-        return new AuditChainVerificationResponse(
-                true,
-                "Audit chain is valid"
-        );
-    }
+    
 }
