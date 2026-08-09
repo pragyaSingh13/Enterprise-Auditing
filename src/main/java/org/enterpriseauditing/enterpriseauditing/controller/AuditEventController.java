@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.enterpriseauditing.enterpriseauditing.dto.AuditChainVerificationResponse;
 import org.enterpriseauditing.enterpriseauditing.dto.AuditEventRequest;
 import org.enterpriseauditing.enterpriseauditing.model.AuditEvent;
+import org.enterpriseauditing.enterpriseauditing.service.AuditChainVerificationService;
 import org.enterpriseauditing.enterpriseauditing.service.AuditEventService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -19,7 +20,7 @@ import java.util.List;
 @RequestMapping("/api/v1/audit-events")
 @RequiredArgsConstructor
 public class AuditEventController {
-
+    private final AuditChainVerificationService auditChainVerificationService;
     private final AuditEventService auditEventService;
 
     // Create audit event
@@ -118,8 +119,13 @@ public class AuditEventController {
         );
     }
 
+//    @GetMapping("/verify")
+//    public AuditChainVerificationResponse verifyAuditChain() {
+//        return auditEventService.verifyAuditChain();
+//    }
+
     @GetMapping("/verify")
     public AuditChainVerificationResponse verifyAuditChain() {
-        return auditEventService.verifyAuditChain();
+        return auditChainVerificationService.verifyChain();
     }
 }

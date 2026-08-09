@@ -34,4 +34,6 @@ public interface AuditEventRepository
     );
 
     AuditEvent findTopByOrderByTimestampDesc();
+
+    List<AuditEvent> findAllByOrderByTimestampAsc();
 }
