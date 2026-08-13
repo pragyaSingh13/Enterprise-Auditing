@@ -3,6 +3,7 @@ package org.enterpriseauditing.enterpriseauditing.service;
 import lombok.RequiredArgsConstructor;
 import org.enterpriseauditing.enterpriseauditing.dto.AuditChainVerificationResponse;
 import org.enterpriseauditing.enterpriseauditing.dto.AuditEventRequest;
+import org.enterpriseauditing.enterpriseauditing.exception.ResourceNotFoundException;
 import org.enterpriseauditing.enterpriseauditing.model.AuditEvent;
 import org.enterpriseauditing.enterpriseauditing.producer.AuditEventProducer;
 import org.enterpriseauditing.enterpriseauditing.repository.AuditEventRepository;
@@ -58,7 +59,9 @@ public class AuditEventService {
     public AuditEvent getAuditEventById(String id) {
         return auditEventRepository.findById(id)
                 .orElseThrow(() ->
-                        new RuntimeException("Audit event not found: " + id)
+                        new ResourceNotFoundException(
+                                "Audit event not found: " + id
+                        )
                 );
     }
 

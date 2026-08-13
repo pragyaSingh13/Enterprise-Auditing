@@ -5,6 +5,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.enterpriseauditing.enterpriseauditing.model.Role;
 import org.enterpriseauditing.enterpriseauditing.service.JwtService;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -17,6 +19,7 @@ import java.util.List;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class JwtAuthenticationFilter
         extends OncePerRequestFilter {
 
@@ -44,31 +47,54 @@ public class JwtAuthenticationFilter
                 authorizationHeader.substring(7);
 
         // Invalid JWT
-        if (!jwtService.isTokenValid(token)) {
+        try {
 
-            filterChain.doFilter(request, response);
-            return;
+            if (!jwtService.isTokenValid(token)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            if (SecurityContextHolder
+                    .getContext()
+                    .getAuthentication() == null) {
+
+                String username =
+                        jwtService.extractUsername(token);
+
+                String role =
+                        jwtService.extractRole(token);
+
+                Role userRole;
+
+                try {
+                    userRole = Role.valueOf(role);
+                } catch (IllegalArgumentException e) {
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
+                SimpleGrantedAuthority authority =
+                        new SimpleGrantedAuthority(
+                                "ROLE_" + userRole.name()
+                        );
+                
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                username,
+                                null,
+                                List.of(authority)
+                        );
+
+                SecurityContextHolder
+                        .getContext()
+                        .setAuthentication(authentication);
+            }
+
+        } catch (Exception e) {
+
+            SecurityContextHolder
+                    .clearContext();
         }
-
-        String username =
-                jwtService.extractUsername(token);
-
-        String role =
-                jwtService.extractRole(token);
-
-        SimpleGrantedAuthority authority =
-                new SimpleGrantedAuthority("ROLE_" + role);
-
-        UsernamePasswordAuthenticationToken authentication =
-                new UsernamePasswordAuthenticationToken(
-                        username,
-                        null,
-                        List.of(authority)
-                );
-
-        SecurityContextHolder
-                .getContext()
-                .setAuthentication(authentication);
 
         filterChain.doFilter(request, response);
     }

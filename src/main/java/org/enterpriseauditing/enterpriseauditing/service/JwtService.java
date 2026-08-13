@@ -54,17 +54,13 @@ public class JwtService {
                 .getPayload();
     }
 
-
-
     public String extractUsername(String token) {
         return extractClaims(token).getSubject();
     }
 
     public String extractRole(String token) {
-        return extractClaims(
-                token,
-                claims -> claims.get("role", String.class)
-        );
+        return extractClaims(token)
+                .get("role", String.class);
     }
 
     public boolean isTokenValid(String token) {

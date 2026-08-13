@@ -1,5 +1,8 @@
 package org.enterpriseauditing.enterpriseauditing.service;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.enterpriseauditing.enterpriseauditing.dto.AuditChainVerificationResponse;
@@ -7,10 +10,10 @@ import org.enterpriseauditing.enterpriseauditing.model.AuditEvent;
 import org.enterpriseauditing.enterpriseauditing.repository.AuditEventRepository;
 import org.enterpriseauditing.enterpriseauditing.util.AuditEventCanonicalizer;
 import org.enterpriseauditing.enterpriseauditing.util.HashUtil;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -18,7 +21,24 @@ public class AuditChainVerificationService {
 
     private final AuditEventRepository auditEventRepository;
     private final DigitalSignatureService digitalSignatureService;
+    private final MeterRegistry meterRegistry;
 
+    private Counter hashVerificationFailures;
+
+    @PostConstruct
+    private void initializeMetrics() {
+
+        hashVerificationFailures =
+                Counter.builder(
+                                "audit.hash.verification.failures"
+                        )
+                        .description(
+                                "Number of audit hash-chain verification failures"
+                        )
+                        .register(meterRegistry);
+    }
+
+    @PreAuthorize("hasAnyRole('AUDITOR', 'ADMIN')")
     public AuditChainVerificationResponse verifyChain() {
 
         log.info("Starting audit chain integrity verification");
@@ -55,7 +75,6 @@ public class AuditChainVerificationService {
             // 1. VERIFY PREVIOUS HASH LINK
             // ==========================================
 
-            // First event must not have previousHash
             if (previousEvent == null) {
 
                 if (currentEvent.getPreviousHash() != null) {
@@ -212,7 +231,6 @@ public class AuditChainVerificationService {
                 .build();
     }
 
-
     private AuditChainVerificationResponse failure(
             List<AuditEvent> events,
             int index,
@@ -221,6 +239,18 @@ public class AuditChainVerificationService {
             String expectedHash,
             String actualHash,
             String message) {
+
+        /*
+         * Serious security event:
+         * the audit chain or its signature has failed integrity verification.
+         */
+        hashVerificationFailures.increment();
+
+        log.error(
+                "AUDIT INTEGRITY FAILURE: type={}, eventId={}",
+                failureType,
+                event.getId()
+        );
 
         return AuditChainVerificationResponse.builder()
                 .valid(false)
