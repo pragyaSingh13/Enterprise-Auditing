@@ -1,29 +1,9 @@
 services:
-  cassandra:
-    image: 'cassandra:latest'
-    environment:
-      - 'CASSANDRA_DC=dc1'
-      - 'CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch'
-    ports:
-      - '9042'
-  elasticsearch:
-    image: 'docker.elastic.co/elasticsearch/elasticsearch:9.3.3'
-    environment:
-      - 'ELASTIC_PASSWORD=secret'
-      - 'discovery.type=single-node'
-      - 'xpack.security.enabled=false'
-    ports:
-      - '9200'
-      - '9300'
   mongodb:
-    image: 'mongo:latest'
+    image: 'mongo:8.0'
     environment:
-      - 'MONGO_INITDB_DATABASE=mydatabase'
-      - 'MONGO_INITDB_ROOT_PASSWORD=secret'
-      - 'MONGO_INITDB_ROOT_USERNAME=root'
+      MONGO_INITDB_DATABASE: audilogtdb
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: secret
     ports:
-      - '27017'
-  redis:
-    image: 'redis:latest'
-    ports:
-      - '6379'
+      - '27017:27017'
