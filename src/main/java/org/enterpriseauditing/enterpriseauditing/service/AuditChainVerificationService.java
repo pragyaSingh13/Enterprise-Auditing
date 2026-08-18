@@ -1,22 +1,44 @@
 package org.enterpriseauditing.enterpriseauditing.service;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.enterpriseauditing.enterpriseauditing.dto.AuditChainVerificationResponse;
 import org.enterpriseauditing.enterpriseauditing.model.AuditEvent;
 import org.enterpriseauditing.enterpriseauditing.repository.AuditEventRepository;
+import org.enterpriseauditing.enterpriseauditing.util.AuditEventCanonicalizer;
 import org.enterpriseauditing.enterpriseauditing.util.HashUtil;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuditChainVerificationService {
 
     private final AuditEventRepository auditEventRepository;
+    private final DigitalSignatureService digitalSignatureService;
+    private final MeterRegistry meterRegistry;
 
+    private Counter hashVerificationFailures;
+
+    @PostConstruct
+    private void initializeMetrics() {
+
+        hashVerificationFailures =
+                Counter.builder(
+                                "audit.hash.verification.failures"
+                        )
+                        .description(
+                                "Number of audit hash-chain verification failures"
+                        )
+                        .register(meterRegistry);
+    }
+
+    @PreAuthorize("hasAnyRole('AUDITOR', 'ADMIN')")
     public AuditChainVerificationResponse verifyChain() {
 
         log.info("Starting audit chain integrity verification");
@@ -49,7 +71,10 @@ public class AuditChainVerificationService {
                     i + 1
             );
 
-            // First event must not have previousHash
+            // ==========================================
+            // 1. VERIFY PREVIOUS HASH LINK
+            // ==========================================
+
             if (previousEvent == null) {
 
                 if (currentEvent.getPreviousHash() != null) {
@@ -97,8 +122,18 @@ public class AuditChainVerificationService {
                 }
             }
 
-            // Recalculate current event hash
-            String hashInput = buildHashInput(currentEvent);
+            // ==========================================
+            // 2. BUILD CANONICAL EVENT DATA
+            // ==========================================
+
+            String hashInput =
+                    AuditEventCanonicalizer.buildHashInput(
+                            currentEvent
+                    );
+
+            // ==========================================
+            // 3. VERIFY EVENT HASH
+            // ==========================================
 
             String calculatedHash =
                     HashUtil.sha256(hashInput);
@@ -124,6 +159,61 @@ public class AuditChainVerificationService {
                 );
             }
 
+            // ==========================================
+            // 4. VERIFY DIGITAL SIGNATURE
+            // ==========================================
+
+            String digitalSignature =
+                    currentEvent.getDigitalSignature();
+
+            if (digitalSignature == null ||
+                    digitalSignature.isBlank()) {
+
+                log.error(
+                        "Digital signature is missing. Event ID: {}",
+                        currentEvent.getId()
+                );
+
+                return failure(
+                        events,
+                        i,
+                        currentEvent,
+                        "SIGNATURE_MISSING",
+                        null,
+                        null,
+                        "Digital signature is missing"
+                );
+            }
+
+            boolean signatureValid =
+                    digitalSignatureService.verify(
+                            hashInput,
+                            digitalSignature
+                    );
+
+            if (!signatureValid) {
+
+                log.error(
+                        "Digital signature verification failed. Event ID: {}",
+                        currentEvent.getId()
+                );
+
+                return failure(
+                        events,
+                        i,
+                        currentEvent,
+                        "SIGNATURE_MISMATCH",
+                        null,
+                        digitalSignature,
+                        "Digital signature verification failed"
+                );
+            }
+
+            log.debug(
+                    "Event verified successfully: {}",
+                    currentEvent.getId()
+            );
+
             previousEvent = currentEvent;
         }
 
@@ -136,7 +226,7 @@ public class AuditChainVerificationService {
                 .valid(true)
                 .totalEvents(events.size())
                 .verifiedEvents(events.size())
-                .message("Audit chain is valid")
+                .message("Audit chain and digital signatures are valid")
                 .failureType("VALID")
                 .build();
     }
@@ -149,6 +239,18 @@ public class AuditChainVerificationService {
             String expectedHash,
             String actualHash,
             String message) {
+
+        /*
+         * Serious security event:
+         * the audit chain or its signature has failed integrity verification.
+         */
+        hashVerificationFailures.increment();
+
+        log.error(
+                "AUDIT INTEGRITY FAILURE: type={}, eventId={}",
+                failureType,
+                event.getId()
+        );
 
         return AuditChainVerificationResponse.builder()
                 .valid(false)
@@ -172,19 +274,6 @@ public class AuditChainVerificationService {
                 .build();
     }
 
-    
-    private String buildHashInput(AuditEvent event) {
-
-        return String.join("|",
-                nullToEmpty(event.getActorId()),
-                nullToEmpty(event.getAction()),
-                nullToEmpty(event.getResourceType()),
-                nullToEmpty(event.getResourceId()),
-                nullToEmpty(event.getReason()),
-                event.getTimestamp().toString(),
-                nullToEmpty(event.getPreviousHash())
-        );
-    }
 
     private String nullToEmpty(String value) {
         return value == null ? "" : value;
